@@ -62,10 +62,10 @@ Download FASTQs from all matching run projects into a local directory:
 python3 dx-grab.py --project "run_*" --folder "*/fastq*" --name "*.fastq.gz" --output ./fastqs
 ```
 
-Download all files from a specific project by ID:
+Download all BAMs from a specific project by ID:
 
 ```bash
-python3 dx-grab.py --project "project-xxxx" --output ./downloads
+python3 dx-grab.py --project "project-xxxx" --name "*.bam" --output ./downloads
 ```
 
 Find `*.filter.vcf.gz` but exclude any filenames containing `Q`:
