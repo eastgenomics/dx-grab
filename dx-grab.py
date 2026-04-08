@@ -3,7 +3,7 @@
 dx-grab — Find and download files from DNAnexus projects.
 
 Usage:
-    python dx-grab.py [--project PATTERN] [--folder PATTERN] [--name PATTERN]
+    python dx-grab.py --name PATTERN [--project PATTERN] [--folder PATTERN]
                       [--output DIR] [--dry-run]
 """
 
@@ -42,9 +42,9 @@ Examples:
     )
     parser.add_argument(
         "--name",
-        default="*",
+        required=True,
         metavar="PATTERN",
-        help="Filename glob pattern (e.g. '*.vcf.gz'). Default: all files.",
+        help="Filename glob pattern (e.g. '*.vcf.gz')",
     )
     parser.add_argument(
         "--output",
