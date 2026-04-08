@@ -29,7 +29,7 @@ dx login
 
 ```
 python3 dx-grab.py --name PATTERN [--project PATTERN] [--folder PATTERN]
-                  [--output DIR] [--dry-run]
+                   [--output DIR] [--limit N] [--dry-run]
 ```
 
 | Argument | Required | Description |
@@ -38,7 +38,7 @@ python3 dx-grab.py --name PATTERN [--project PATTERN] [--folder PATTERN]
 | `--project` | No | Project name glob (e.g. `*230601*`). Default: all projects |
 | `--folder` | No | Folder path glob (e.g. `*/fastq*`). Default: all folders |
 | `--output` | No | Local download directory. Default: `./downloads` |
-| `--limit` | No | Limit download to the first N matched files (all files are listed) |
+| `--limit` | No | Limit download to N files (all files are listed; live files are preferred) |
 | `--dry-run` | No | List matched files without downloading |
 
 ## Examples
@@ -65,6 +65,12 @@ Download all files from a specific project by ID:
 
 ```bash
 python3 dx-grab.py --project "project-xxxx" --output ./downloads
+```
+
+Download up to 5 files, preferring live files over archived ones:
+
+```bash
+python3 dx-grab.py --project "*230601*" --name "*.vcf.gz" --limit 5
 ```
 
 ## Archived files
