@@ -38,6 +38,7 @@ python3 dx-grab.py --name PATTERN [--project PATTERN] [--folder PATTERN]
 | `--project` | No | Project name glob (e.g. `*230601*`). Default: all projects |
 | `--folder` | No | Folder path glob (e.g. `*/fastq*`). Default: all folders |
 | `--output` | No | Local download directory. Default: `./downloads` |
+| `--limit` | No | Limit download to the first N matched files (all files are listed) |
 | `--dry-run` | No | List matched files without downloading |
 
 ## Examples

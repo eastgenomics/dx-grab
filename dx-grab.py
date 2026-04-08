@@ -53,6 +53,13 @@ Examples:
         help="Local download directory. Default: ./downloads",
     )
     parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Limit download to the first N matched files. All files are listed; only N are downloaded.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="List matched files without downloading.",
@@ -61,11 +68,17 @@ Examples:
 
 
 def check_auth():
+    import dxpy
     try:
-        import dxpy
         dxpy.whoami()
-    except Exception:
-        print("ERROR: Not logged in to DNAnexus. Run `dx login` first.", file=sys.stderr)
+    except dxpy.exceptions.DXAPIError as e:
+        if e.code == 401:
+            print("ERROR: Not logged in to DNAnexus. Run `dx login` first.", file=sys.stderr)
+        else:
+            print(f"ERROR: DNAnexus API error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(1)
     return dxpy
 
@@ -328,6 +341,11 @@ def main():
 
     if args.dry_run:
         sys.exit(0)
+
+    if args.limit is not None:
+        if args.limit < len(files):
+            print(f"\nLimit set: downloading {args.limit} of {len(files)} matched file(s).")
+        files = files[:args.limit]
 
     files = handle_archives(dxpy, files)
     download_files(dxpy, files, args.output)
