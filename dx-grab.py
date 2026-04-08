@@ -344,7 +344,10 @@ def main():
 
     if args.limit is not None:
         if args.limit < len(files):
-            print(f"\nLimit set: downloading {args.limit} of {len(files)} matched file(s).")
+            # Sort live files first so the limit is filled without touching archived files
+            files = sorted(files, key=lambda f: 0 if f["archival_state"] == "live" else 1)
+            print(f"\nLimit set: downloading {args.limit} of {len(files)} matched file(s) "
+                  f"(live files preferred).")
         files = files[:args.limit]
 
     files = handle_archives(dxpy, files)
