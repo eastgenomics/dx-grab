@@ -27,7 +27,7 @@ dx login
 ## Usage
 
 ```
-python dx-grab.py --name PATTERN [--project PATTERN] [--folder PATTERN]
+python3 dx-grab.py --name PATTERN [--project PATTERN] [--folder PATTERN]
                   [--output DIR] [--dry-run]
 ```
 
@@ -44,25 +44,25 @@ python dx-grab.py --name PATTERN [--project PATTERN] [--folder PATTERN]
 List all VCFs across every accessible project without downloading:
 
 ```bash
-python dx-grab.py --name "*.vcf.gz" --dry-run
+python3 dx-grab.py --name "*.vcf.gz" --dry-run
 ```
 
 List all VCFs across projects matching `*230601*` without downloading:
 
 ```bash
-python dx-grab.py --project "*230601*" --name "*.vcf.gz" --dry-run
+python3 dx-grab.py --project "*230601*" --name "*.vcf.gz" --dry-run
 ```
 
 Download FASTQs from all matching run projects into a local directory:
 
 ```bash
-python dx-grab.py --project "run_*" --folder "*/fastq*" --name "*.fastq.gz" --output ./fastqs
+python3 dx-grab.py --project "run_*" --folder "*/fastq*" --name "*.fastq.gz" --output ./fastqs
 ```
 
 Download all files from a specific project by ID:
 
 ```bash
-python dx-grab.py --project "project-xxxx" --output ./downloads
+python3 dx-grab.py --project "project-xxxx" --output ./downloads
 ```
 
 ## Archived files
