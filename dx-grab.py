@@ -3,7 +3,7 @@
 dx-grab — Find and download files from DNAnexus projects.
 
 Usage:
-    python dx-grab.py --project PATTERN [--folder PATTERN] [--name PATTERN]
+    python dx-grab.py [--project PATTERN] [--folder PATTERN] [--name PATTERN]
                       [--output DIR] [--dry-run]
 """
 
@@ -22,6 +22,7 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  python dx-grab.py --name "*.vcf.gz" --dry-run
   python dx-grab.py --project "*230601*" --name "*.vcf.gz" --dry-run
   python dx-grab.py --project "run_*" --folder "*/fastq*" --name "*.fastq.gz" --output ./fastqs
   python dx-grab.py --project "project-xxxx" --name "*.bam"
@@ -29,9 +30,9 @@ Examples:
     )
     parser.add_argument(
         "--project",
-        required=True,
+        default=None,
         metavar="PATTERN",
-        help="Project name glob pattern (e.g. '*230601*', 'run_*')",
+        help="Project name glob pattern (e.g. '*230601*', 'run_*'). Default: all projects.",
     )
     parser.add_argument(
         "--folder",
@@ -78,8 +79,13 @@ def fmt_size(n_bytes):
 
 
 def find_projects(dxpy, pattern):
-    print(f"\nSearching for projects matching: {pattern!r}")
-    projects = list(dxpy.find_projects(name=pattern, name_mode="glob", describe=True))
+    if pattern:
+        print(f"\nSearching for projects matching: {pattern!r}")
+        kwargs = {"name": pattern, "name_mode": "glob"}
+    else:
+        print("\nSearching all accessible projects...")
+        kwargs = {}
+    projects = list(dxpy.find_projects(describe=True, **kwargs))
     if not projects:
         print("No projects found.", file=sys.stderr)
         sys.exit(1)

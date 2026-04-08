@@ -27,19 +27,25 @@ dx login
 ## Usage
 
 ```
-python dx-grab.py --project PATTERN [--folder PATTERN] [--name PATTERN]
+python dx-grab.py [--project PATTERN] [--folder PATTERN] [--name PATTERN]
                   [--output DIR] [--dry-run]
 ```
 
 | Argument | Required | Description |
 |---|---|---|
-| `--project` | Yes | Project name glob (e.g. `*230601*`) |
+| `--project` | No | Project name glob (e.g. `*230601*`). Default: all projects |
 | `--folder` | No | Folder path glob (e.g. `*/fastq*`). Default: all folders |
 | `--name` | No | Filename glob (e.g. `*.vcf.gz`). Default: all files |
 | `--output` | No | Local download directory. Default: `./downloads` |
 | `--dry-run` | No | List matched files without downloading |
 
 ## Examples
+
+List all VCFs across every accessible project without downloading:
+
+```bash
+python dx-grab.py --name "*.vcf.gz" --dry-run
+```
 
 List all VCFs across projects matching `*230601*` without downloading:
 
