@@ -47,6 +47,13 @@ Examples:
         help="Filename glob pattern (e.g. '*.vcf.gz')",
     )
     parser.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        metavar="PATTERN",
+        help="Exclude files whose name matches this glob (e.g. '*Q*'). Repeatable.",
+    )
+    parser.add_argument(
         "--output",
         default="./downloads",
         metavar="DIR",
@@ -332,6 +339,16 @@ def main():
 
     projects = find_projects(dxpy, args.project)
     files = find_files(dxpy, projects, args.name, args.folder)
+
+    if args.exclude:
+        before = len(files)
+        files = [
+            f for f in files
+            if not any(fnmatch.fnmatch(f["name"], pat) for pat in args.exclude)
+        ]
+        excluded = before - len(files)
+        if excluded:
+            print(f"Excluded {excluded} file(s) matching: {', '.join(args.exclude)}")
 
     if not files:
         print("\nNo matching files found.")

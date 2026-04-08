@@ -29,7 +29,7 @@ dx login
 
 ```
 python3 dx-grab.py --name PATTERN [--project PATTERN] [--folder PATTERN]
-                   [--output DIR] [--limit N] [--dry-run]
+                   [--exclude PATTERN] [--output DIR] [--limit N] [--dry-run]
 ```
 
 | Argument | Required | Description |
@@ -37,6 +37,7 @@ python3 dx-grab.py --name PATTERN [--project PATTERN] [--folder PATTERN]
 | `--name` | Yes | Filename glob (e.g. `*.vcf.gz`) |
 | `--project` | No | Project name glob (e.g. `*230601*`). Default: all projects |
 | `--folder` | No | Folder path glob (e.g. `*/fastq*`). Default: all folders |
+| `--exclude` | No | Exclude files matching this glob (e.g. `*Q*`). Repeatable. |
 | `--output` | No | Local download directory. Default: `./downloads` |
 | `--limit` | No | Limit download to N files (all files are listed; live files are preferred) |
 | `--dry-run` | No | List matched files without downloading |
@@ -65,6 +66,18 @@ Download all files from a specific project by ID:
 
 ```bash
 python3 dx-grab.py --project "project-xxxx" --output ./downloads
+```
+
+Find `*.filter.vcf.gz` but exclude any filenames containing `Q`:
+
+```bash
+python3 dx-grab.py --project "*230601*" --name "*.filter.vcf.gz" --exclude "*Q*" --dry-run
+```
+
+Exclude multiple patterns:
+
+```bash
+python3 dx-grab.py --name "*.vcf.gz" --exclude "*Q*" --exclude "*fail*"
 ```
 
 Download up to 5 files, preferring live files over archived ones:
