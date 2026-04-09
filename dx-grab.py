@@ -108,12 +108,11 @@ def _glob_to_iregex(pattern):
 def find_projects(dxpy, pattern):
     if pattern:
         print(f"\nSearching for projects matching: {pattern!r}")
+        kwargs = {"name": _glob_to_iregex(pattern), "name_mode": "regexp"}
     else:
         print("\nSearching all accessible projects...")
-    projects = list(dxpy.find_projects(describe=True))
-    if pattern:
-        projects = [p for p in projects
-                    if fnmatch.fnmatch(p["describe"]["name"].lower(), pattern.lower())]
+        kwargs = {}
+    projects = list(dxpy.find_projects(describe=True, **kwargs))
     if not projects:
         print("No projects found.", file=sys.stderr)
         sys.exit(1)
