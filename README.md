@@ -34,10 +34,10 @@ python3 dx-grab.py --name PATTERN [--project PATTERN] [--folder PATTERN]
 
 | Argument | Required | Description |
 |---|---|---|
-| `--name` | Yes | Filename glob (e.g. `*.vcf.gz`) |
-| `--project` | No but HIGHLY recommended | Project name glob (e.g. `*230601*`). Default: all projects |
-| `--folder` | No | Folder path glob (e.g. `*/fastq*`). Default: all folders |
-| `--exclude` | No | Exclude files matching this glob (e.g. `*Q*`). Repeatable. |
+| `--name` | Yes | Filename glob (e.g. `*.vcf.gz`). Case-insensitive. |
+| `--project` | No but HIGHLY recommended | Project name glob (e.g. `*230601*`). Case-insensitive. Default: all projects |
+| `--folder` | No | Folder path glob (e.g. `*/fastq*`). Case-insensitive. Default: all folders |
+| `--exclude` | No | Exclude files matching this glob (e.g. `*Q*`). Case-insensitive. Repeatable. |
 | `--output` | No | Local download directory. Default: `./downloads` |
 | `--limit` | No | Limit download to N files (all files are listed; live files are preferred) |
 | `--dry-run` | No | List matched files without downloading |
