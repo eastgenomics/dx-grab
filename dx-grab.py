@@ -9,6 +9,7 @@ Usage:
 
 import argparse
 import fnmatch
+import re
 import os
 import sys
 import time
@@ -98,14 +99,21 @@ def fmt_size(n_bytes):
     return f"{n_bytes:.1f} PB"
 
 
+def _glob_to_iregex(pattern):
+    """Convert a shell glob pattern to a case-insensitive PCRE-compatible regex."""
+    regex = re.escape(pattern).replace(r"\*", ".*").replace(r"\?", ".")
+    return "(?i)^" + regex + "$"
+
+
 def find_projects(dxpy, pattern):
     if pattern:
         print(f"\nSearching for projects matching: {pattern!r}")
-        kwargs = {"name": pattern, "name_mode": "glob"}
     else:
         print("\nSearching all accessible projects...")
-        kwargs = {}
-    projects = list(dxpy.find_projects(describe=True, **kwargs))
+    projects = list(dxpy.find_projects(describe=True))
+    if pattern:
+        projects = [p for p in projects
+                    if fnmatch.fnmatch(p["describe"]["name"].lower(), pattern.lower())]
     if not projects:
         print("No projects found.", file=sys.stderr)
         sys.exit(1)
@@ -128,8 +136,8 @@ def find_files(dxpy, projects, name_pattern, folder_pattern):
             hits = dxpy.find_data_objects(
                 classname="file",
                 project=proj_id,
-                name=name_pattern,
-                name_mode="glob",
+                name=_glob_to_iregex(name_pattern),
+                name_mode="regexp",
                 folder="/",
                 recurse=True,
                 describe=True,
@@ -138,7 +146,7 @@ def find_files(dxpy, projects, name_pattern, folder_pattern):
                 desc = h["describe"]
                 folder = desc.get("folder", "/")
 
-                if folder_pattern and not fnmatch.fnmatch(folder, folder_pattern):
+                if folder_pattern and not fnmatch.fnmatch(folder.lower(), folder_pattern.lower()):
                     continue
 
                 results.append({
@@ -344,7 +352,7 @@ def main():
         before = len(files)
         files = [
             f for f in files
-            if not any(fnmatch.fnmatch(f["name"], pat) for pat in args.exclude)
+            if not any(fnmatch.fnmatch(f["name"].lower(), pat.lower()) for pat in args.exclude)
         ]
         excluded = before - len(files)
         if excluded:
