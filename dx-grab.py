@@ -99,21 +99,29 @@ def fmt_size(n_bytes):
     return f"{n_bytes:.1f} PB"
 
 
-def _icase_glob(pattern):
-    """Expand a glob pattern so each letter matches both cases, e.g. 'a' -> '[aA]'."""
-    return "".join(f"[{c.lower()}{c.upper()}]" if c.isalpha() else c for c in pattern)
-
-
 def _glob_to_iregex(pattern):
-    """Convert a shell glob pattern to a case-insensitive PCRE-compatible regex."""
-    regex = re.escape(pattern).replace(r"\*", ".*").replace(r"\?", ".")
-    return "(?i)^" + regex + "$"
+    """Convert a glob to a case-insensitive regex using [xX] character classes.
+
+    Uses explicit character classes rather than (?i) so it works across both
+    findProjects and findDataObjects, which use different regex engines.
+    """
+    parts = []
+    for c in pattern:
+        if c == "*":
+            parts.append(".*")
+        elif c == "?":
+            parts.append(".")
+        elif c.isalpha():
+            parts.append(f"[{c.lower()}{c.upper()}]")
+        else:
+            parts.append(re.escape(c))
+    return "^" + "".join(parts) + "$"
 
 
 def find_projects(dxpy, pattern):
     if pattern:
         print(f"\nSearching for projects matching: {pattern!r}")
-        projects = list(dxpy.find_projects(describe=True, name=pattern.lower(), name_mode="glob"))
+        projects = list(dxpy.find_projects(describe=True, name=_glob_to_iregex(pattern), name_mode="regexp"))
     else:
         print("\nSearching all accessible projects...")
         projects = list(dxpy.find_projects(describe=True))
