@@ -99,6 +99,11 @@ def fmt_size(n_bytes):
     return f"{n_bytes:.1f} PB"
 
 
+def _icase_glob(pattern):
+    """Expand a glob pattern so each letter matches both cases, e.g. 'a' -> '[aA]'."""
+    return "".join(f"[{c.lower()}{c.upper()}]" if c.isalpha() else c for c in pattern)
+
+
 def _glob_to_iregex(pattern):
     """Convert a shell glob pattern to a case-insensitive PCRE-compatible regex."""
     regex = re.escape(pattern).replace(r"\*", ".*").replace(r"\?", ".")
@@ -108,7 +113,7 @@ def _glob_to_iregex(pattern):
 def find_projects(dxpy, pattern):
     if pattern:
         print(f"\nSearching for projects matching: {pattern!r}")
-        kwargs = {"name": _glob_to_iregex(pattern), "name_mode": "regexp"}
+        kwargs = {"name": _icase_glob(pattern), "name_mode": "glob"}
     else:
         print("\nSearching all accessible projects...")
         kwargs = {}
