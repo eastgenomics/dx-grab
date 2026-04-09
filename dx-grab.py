@@ -113,11 +113,14 @@ def _glob_to_iregex(pattern):
 def find_projects(dxpy, pattern):
     if pattern:
         print(f"\nSearching for projects matching: {pattern!r}")
-        kwargs = {"name": _icase_glob(pattern), "name_mode": "glob"}
+        # Fetch all projects with name="*" to get the same broad API scope as a
+        # named search, then filter client-side for true case-insensitive matching.
+        all_projects = dxpy.find_projects(describe=True, name="*", name_mode="glob")
+        projects = [p for p in all_projects
+                    if fnmatch.fnmatch(p["describe"]["name"].lower(), pattern.lower())]
     else:
         print("\nSearching all accessible projects...")
-        kwargs = {}
-    projects = list(dxpy.find_projects(describe=True, **kwargs))
+        projects = list(dxpy.find_projects(describe=True))
     if not projects:
         print("No projects found.", file=sys.stderr)
         sys.exit(1)
