@@ -29,6 +29,21 @@ PRESETS = {
         "name": "*.vcf.gz",
         "folder": "*eggd_vcf_rescue*",
     },
+    "tso-vcf": {
+        "project": "002_26*TSO500",
+        "name": "*.filter.vcf.gz",
+        "folder": "*eggd_generate_variant_workbook*",
+    },
+    "twe-vcf": {
+        "project": "002_26*TWE",
+        "name": "*.optimised_filtered.vcf.gz",
+        "folder": "*eggd_optimised_filtering*",
+    },
+    "cen-vcf": {
+        "project": "002_26*CEN",
+        "name": "*.optimised_filtered.vcf.gz",
+        "folder": "*eggd_optimised_filtering*",
+    },
 }
 
 
@@ -41,6 +56,12 @@ def parse_args():
 Presets ({preset_names}):
   haem-vcf  HaemOnc diagnostic pre-workbook mutect2 VCFs (2026)
             --project "002_26*MYE" --name "*.vcf.gz" --folder "*eggd_vcf_rescue*"
+  tso-vcf   Solid tumour diagnostic pre-workbook VCFs (2026)
+            --project "002_26*TSO500" --name "*.filter.vcf.gz" --folder "*eggd_generate_variant_workbook*"
+  twe-vcf   RD diagnostic pre-workbook VCFs, TWE (2026)
+            --project "002_26*TWE" --name "*.optimised_filtered.vcf.gz" --folder "*eggd_optimised_filtering*"
+  cen-vcf   RD diagnostic pre-workbook VCFs, CEN (2026)
+            --project "002_26*CEN" --name "*.optimised_filtered.vcf.gz" --folder "*eggd_optimised_filtering*"
 
 Examples:
   python dx-grab.py --preset haem-vcf --dry-run
