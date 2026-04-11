@@ -65,6 +65,9 @@ Presets are named shortcuts that bundle `--project`, `--name`, and `--folder` va
 | Preset | Description |
 |---|---|
 | `haem-vcf` | HaemOnc diagnostic pre-workbook mutect2 VCFs (2026) |
+| `tso-vcf` | Solid tumour diagnostic pre-workbook VCFs (2026) |
+| `twe-vcf` | RD diagnostic pre-workbook VCFs, TWE (2026) |
+| `cen-vcf` | RD diagnostic pre-workbook VCFs, CEN (2026) |
 
 ## Examples
 
