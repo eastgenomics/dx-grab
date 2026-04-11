@@ -43,8 +43,20 @@ python3 dx-grab.py --preset NAME [--output DIR] [--limit N] [--dry-run]
 | `--output` | No | Local download directory. Default: `./downloads` |
 | `--limit` | No | Limit download to N files (all files are listed; live files are preferred) |
 | `--dry-run` | No | List matched files without downloading |
+| `--yes` | No | Automatically confirm unarchiving without prompting |
+| `--skip-archived` | No | Automatically skip archived files without prompting |
+| `--skip-existing` | No | Skip files that already exist at the local destination path |
+| `--json` | No | Output matched/downloaded files as JSON instead of human-readable text |
 
 \* Required unless `--preset` is used.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Success |
+| `1` | Error (bad arguments, auth failure, etc.) |
+| `2` | No matching files found |
 
 ## Presets
 
@@ -102,6 +114,30 @@ Download up to 5 files, preferring live files over archived ones:
 
 ```bash
 python3 dx-grab.py --project "*230601*" --name "*.vcf.gz" --limit 5
+```
+
+Download non-interactively, skipping any archived files without prompting:
+
+```bash
+python3 dx-grab.py --preset haem-vcf --limit 20 --skip-archived --output ./vcfs
+```
+
+Download non-interactively, automatically submitting unarchive requests for archived files:
+
+```bash
+python3 dx-grab.py --preset haem-vcf --yes --output ./vcfs
+```
+
+Resume a partial download without re-downloading files already on disk:
+
+```bash
+python3 dx-grab.py --preset haem-vcf --limit 20 --skip-existing --output ./vcfs
+```
+
+List matched files as JSON (e.g. for scripting):
+
+```bash
+python3 dx-grab.py --preset haem-vcf --dry-run --json
 ```
 
 ## Archived files

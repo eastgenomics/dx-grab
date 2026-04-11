@@ -5,10 +5,16 @@ dx-grab — Find and download files from DNAnexus projects.
 Usage:
     python dx-grab.py --name PATTERN [--project PATTERN] [--folder PATTERN]
                       [--output DIR] [--dry-run]
+
+Exit codes:
+    0  Success (files downloaded, or --dry-run completed)
+    1  Error (bad arguments, auth failure, etc.)
+    2  No matching files found
 """
 
 import argparse
 import fnmatch
+import json
 import re
 import os
 import sys
@@ -93,6 +99,26 @@ Examples:
         "--dry-run",
         action="store_true",
         help="List matched files without downloading.",
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Automatically confirm unarchiving of archived files without prompting.",
+    )
+    parser.add_argument(
+        "--skip-archived",
+        action="store_true",
+        help="Automatically skip archived files without prompting.",
+    )
+    parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Skip files that already exist at the local destination path.",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print a JSON summary of matched/downloaded files to stdout instead of human-readable output.",
     )
     args = parser.parse_args()
 
@@ -215,9 +241,21 @@ def find_files(dxpy, projects, name_pattern, folder_pattern):
     return results
 
 
-def print_table(files):
+def print_table(files, emit_json=False):
     if not files:
         print("No files found.")
+        return
+
+    if emit_json:
+        print(json.dumps([{
+            "file_id": f["file_id"],
+            "project_id": f["project_id"],
+            "project_name": f["project_name"],
+            "folder": f["folder"],
+            "name": f["name"],
+            "size": f["size"],
+            "archival_state": f["archival_state"],
+        } for f in files]))
         return
 
     col_proj = max(len(f["project_name"]) for f in files)
@@ -240,7 +278,7 @@ def print_table(files):
     print(f"\nTotal: {len(files)} file(s), {fmt_size(total)}")
 
 
-def handle_archives(dxpy, files):
+def handle_archives(dxpy, files, auto_yes=False, skip_archived=False):
     """
     Prompt the user about archived files, submit unarchive requests if needed,
     and poll until all files that were archiving are live.
@@ -261,15 +299,26 @@ def handle_archives(dxpy, files):
         print(f"\n{len(archived)} file(s) are archived:")
         for f in archived:
             print(f"  {f['project_name']}{f['folder']}/{f['name']}  ({fmt_size(f['size'])})")
-        answer = input("\nUnarchive them? Unarchiving typically takes several hours. [y/N] ").strip().lower()
-        if answer == "y":
+
+        if skip_archived:
+            print("Skipping archived files (--skip-archived).")
+            files = [f for f in files if f["archival_state"] != "archived"]
+        elif auto_yes:
+            print("Unarchiving automatically (--yes).")
             _submit_unarchive(dxpy, archived)
             for f in archived:
                 f["archival_state"] = "unarchiving"
             unarchiving = unarchiving + archived
         else:
-            print("Skipping archived files.")
-            files = [f for f in files if f["archival_state"] != "archived"]
+            answer = input("\nUnarchive them? Unarchiving typically takes several hours. [y/N] ").strip().lower()
+            if answer == "y":
+                _submit_unarchive(dxpy, archived)
+                for f in archived:
+                    f["archival_state"] = "unarchiving"
+                unarchiving = unarchiving + archived
+            else:
+                print("Skipping archived files.")
+                files = [f for f in files if f["archival_state"] != "archived"]
 
     if unarchiving:
         files = _poll_until_live(dxpy, files, unarchiving)
@@ -357,35 +406,56 @@ def resolve_local_path(output_dir, files):
     return files
 
 
-def download_files(dxpy, files, output_dir):
+def download_files(dxpy, files, output_dir, skip_existing=False, emit_json=False):
     os.makedirs(output_dir, exist_ok=True)
     files = resolve_local_path(output_dir, files)
 
     live = [f for f in files if f["archival_state"] == "live"]
-    skipped = len(files) - len(live)
+    skipped_state = len(files) - len(live)
 
-    if skipped:
-        print(f"\nSkipping {skipped} non-live file(s).")
+    if skipped_state:
+        print(f"\nSkipping {skipped_state} non-live file(s).")
+
+    if skip_existing:
+        existing = [f for f in live if os.path.exists(f["local_path"])]
+        if existing:
+            print(f"Skipping {len(existing)} file(s) that already exist locally (--skip-existing).")
+        live = [f for f in live if not os.path.exists(f["local_path"])]
 
     if not live:
         print("Nothing to download.")
+        if emit_json:
+            print(json.dumps({"downloaded": [], "skipped": skipped_state}))
         return
 
     total_size = sum(f["size"] for f in live)
     print(f"\nDownloading {len(live)} file(s) ({fmt_size(total_size)}) to {output_dir}/\n")
 
+    downloaded = []
     for i, f in enumerate(live, 1):
         local = f["local_path"]
         print(f"[{i}/{len(live)}] {f['name']}  ({fmt_size(f['size'])})...")
         try:
             dxpy.download_dxfile(f["file_id"], local, project=f["project_id"])
             print(f"  -> {local}")
+            downloaded.append({
+                "file_id": f["file_id"],
+                "project_id": f["project_id"],
+                "project_name": f["project_name"],
+                "name": f["name"],
+                "folder": f["folder"],
+                "size": f["size"],
+                "local_path": local,
+            })
         except dxpy.exceptions.ResourceNotFound:
             print(f"  WARNING: File not found: {f['file_id']}", file=sys.stderr)
         except Exception as e:
             print(f"  WARNING: Download failed for {f['name']}: {e}", file=sys.stderr)
 
     print("\nDone.")
+
+    if emit_json:
+        print(json.dumps({"downloaded": downloaded, "skipped": skipped_state}))
 
 
 def main():
@@ -407,9 +477,9 @@ def main():
 
     if not files:
         print("\nNo matching files found.")
-        sys.exit(0)
+        sys.exit(2)
 
-    print_table(files)
+    print_table(files, emit_json=args.json)
 
     if args.dry_run:
         sys.exit(0)
@@ -422,8 +492,8 @@ def main():
                   f"(live files preferred).")
         files = files[:args.limit]
 
-    files = handle_archives(dxpy, files)
-    download_files(dxpy, files, args.output)
+    files = handle_archives(dxpy, files, auto_yes=args.yes, skip_archived=args.skip_archived)
+    download_files(dxpy, files, args.output, skip_existing=args.skip_existing, emit_json=args.json)
 
 
 if __name__ == "__main__":
