@@ -161,6 +161,11 @@ def fmt_size(n_bytes):
     return f"{n_bytes:.1f} PB"
 
 
+def _log(msg, emit_json=False):
+    """Print msg to stderr when emit_json is True, stdout otherwise."""
+    print(msg, file=sys.stderr if emit_json else sys.stdout)
+
+
 def _glob_to_iregex(pattern):
     """Convert a glob to a case-insensitive regex using [xX] character classes.
 
@@ -411,33 +416,34 @@ def download_files(dxpy, files, output_dir, skip_existing=False, emit_json=False
     files = resolve_local_path(output_dir, files)
 
     live = [f for f in files if f["archival_state"] == "live"]
-    skipped_state = len(files) - len(live)
+    skipped = len(files) - len(live)
 
-    if skipped_state:
-        print(f"\nSkipping {skipped_state} non-live file(s).")
+    if skipped:
+        _log(f"\nSkipping {skipped} non-live file(s).", emit_json)
 
     if skip_existing:
         existing = [f for f in live if os.path.exists(f["local_path"])]
         if existing:
-            print(f"Skipping {len(existing)} file(s) that already exist locally (--skip-existing).")
+            _log(f"Skipping {len(existing)} file(s) that already exist locally (--skip-existing).", emit_json)
+            skipped += len(existing)
         live = [f for f in live if not os.path.exists(f["local_path"])]
 
     if not live:
-        print("Nothing to download.")
+        _log("Nothing to download.", emit_json)
         if emit_json:
-            print(json.dumps({"downloaded": [], "skipped": skipped_state}))
+            print(json.dumps({"downloaded": [], "skipped": skipped}))
         return
 
     total_size = sum(f["size"] for f in live)
-    print(f"\nDownloading {len(live)} file(s) ({fmt_size(total_size)}) to {output_dir}/\n")
+    _log(f"\nDownloading {len(live)} file(s) ({fmt_size(total_size)}) to {output_dir}/\n", emit_json)
 
     downloaded = []
     for i, f in enumerate(live, 1):
         local = f["local_path"]
-        print(f"[{i}/{len(live)}] {f['name']}  ({fmt_size(f['size'])})...")
+        _log(f"[{i}/{len(live)}] {f['name']}  ({fmt_size(f['size'])})...", emit_json)
         try:
             dxpy.download_dxfile(f["file_id"], local, project=f["project_id"])
-            print(f"  -> {local}")
+            _log(f"  -> {local}", emit_json)
             downloaded.append({
                 "file_id": f["file_id"],
                 "project_id": f["project_id"],
@@ -452,10 +458,10 @@ def download_files(dxpy, files, output_dir, skip_existing=False, emit_json=False
         except Exception as e:
             print(f"  WARNING: Download failed for {f['name']}: {e}", file=sys.stderr)
 
-    print("\nDone.")
+    _log("\nDone.", emit_json)
 
     if emit_json:
-        print(json.dumps({"downloaded": downloaded, "skipped": skipped_state}))
+        print(json.dumps({"downloaded": downloaded, "skipped": skipped}))
 
 
 def main():
