@@ -30,11 +30,13 @@ dx login
 ```
 python3 dx-grab.py --name PATTERN [--project PATTERN] [--folder PATTERN]
                    [--exclude PATTERN] [--output DIR] [--limit N] [--dry-run]
+python3 dx-grab.py --preset NAME [--output DIR] [--limit N] [--dry-run]
 ```
 
 | Argument | Required | Description |
 |---|---|---|
-| `--name` | Yes | Filename glob (e.g. `*.vcf.gz`). Case-insensitive. |
+| `--name` | Yes* | Filename glob (e.g. `*.vcf.gz`). Case-insensitive. |
+| `--preset` | No | Named search preset (see [Presets](#presets)). Replaces `--name`. |
 | `--project` | No but HIGHLY recommended | Project name glob (e.g. `*230601*`). Case-insensitive. Default: all projects |
 | `--folder` | No | Folder path glob (e.g. `*/fastq*`). Case-insensitive. Default: all folders |
 | `--exclude` | No | Exclude files matching this glob (e.g. `*Q*`). Case-insensitive. Repeatable. |
@@ -42,7 +44,23 @@ python3 dx-grab.py --name PATTERN [--project PATTERN] [--folder PATTERN]
 | `--limit` | No | Limit download to N files (all files are listed; live files are preferred) |
 | `--dry-run` | No | List matched files without downloading |
 
+\* Required unless `--preset` is used.
+
+## Presets
+
+Presets are named shortcuts that bundle `--project`, `--name`, and `--folder` values. Individual arguments can still be overridden when using a preset.
+
+| Preset | Description |
+|---|---|
+| `haem-vcf` | HaemOnc diagnostic pre-workbook mutect2 VCFs (2026) |
+
 ## Examples
+
+Use the `haem-vcf` preset to list HaemOnc pre-workbook mutect2 VCFs without downloading:
+
+```bash
+python3 dx-grab.py --preset haem-vcf --dry-run
+```
 
 List all VCFs across every accessible project without downloading:
 

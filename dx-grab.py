@@ -17,17 +17,39 @@ from collections import defaultdict
 from datetime import datetime
 
 
+PRESETS = {
+    "haem-vcf": {
+        "project": "002_26*MYE",
+        "name": "*.vcf.gz",
+        "folder": "*eggd_vcf_rescue*",
+    },
+}
+
+
 def parse_args():
+    preset_names = ", ".join(PRESETS)
     parser = argparse.ArgumentParser(
         description="Find and download files across DNAnexus projects.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+        epilog=f"""
+Presets ({preset_names}):
+  haem-vcf  HaemOnc diagnostic pre-workbook mutect2 VCFs (2026)
+            --project "002_26*MYE" --name "*.vcf.gz" --folder "*eggd_vcf_rescue*"
+
 Examples:
+  python dx-grab.py --preset haem-vcf --dry-run
   python dx-grab.py --name "*.vcf.gz" --dry-run
   python dx-grab.py --project "*230601*" --name "*.vcf.gz" --dry-run
   python dx-grab.py --project "run_*" --folder "*/fastq*" --name "*.fastq.gz" --output ./fastqs
   python dx-grab.py --project "project-xxxx" --name "*.bam"
         """,
+    )
+    parser.add_argument(
+        "--preset",
+        default=None,
+        metavar="NAME",
+        choices=PRESETS,
+        help=f"Named search preset. One of: {preset_names}",
     )
     parser.add_argument(
         "--project",
@@ -43,7 +65,7 @@ Examples:
     )
     parser.add_argument(
         "--name",
-        required=True,
+        default=None,
         metavar="PATTERN",
         help="Filename glob pattern (e.g. '*.vcf.gz')",
     )
@@ -72,7 +94,21 @@ Examples:
         action="store_true",
         help="List matched files without downloading.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    if args.preset:
+        preset = PRESETS[args.preset]
+        if args.project is None:
+            args.project = preset.get("project")
+        if args.name is None:
+            args.name = preset.get("name")
+        if args.folder is None:
+            args.folder = preset.get("folder")
+
+    if args.name is None:
+        parser.error("the following arguments are required: --name (or use --preset)")
+
+    return args
 
 
 def check_auth():
