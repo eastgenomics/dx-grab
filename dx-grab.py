@@ -304,7 +304,7 @@ def print_table(files, emit_json=False):
     print(f"\nTotal: {len(files)} file(s), {fmt_size(total)}")
 
 
-def handle_archives(dxpy, files, auto_yes=False, skip_archived=False):
+def handle_archives(dxpy, files, auto_yes=False, skip_archived=False, on_live=None):
     """
     Prompt the user about archived files, submit unarchive requests if needed,
     and poll until all files that were archiving are live.
@@ -348,7 +348,7 @@ def handle_archives(dxpy, files, auto_yes=False, skip_archived=False):
                 files = [f for f in files if f["archival_state"] not in ("archived", "archival")]
 
     if unarchiving:
-        files = _poll_until_live(dxpy, files, unarchiving)
+        files = _poll_until_live(dxpy, files, unarchiving, on_live=on_live)
 
     return files
 
@@ -370,8 +370,12 @@ def _submit_unarchive(dxpy, files):
     print(f"Unarchive requested for {len(files)} file(s).")
 
 
-def _poll_until_live(dxpy, all_files, waiting):
-    """Poll every 10 minutes until all waiting files are live."""
+def _poll_until_live(dxpy, all_files, waiting, on_live=None):
+    """Poll every 10 minutes until all waiting files are live.
+
+    Calls on_live(batch) with each batch of newly-live files as they appear,
+    so downloads can start immediately rather than waiting for all files.
+    """
     waiting_ids = {f["file_id"] for f in waiting}
     file_index = {f["file_id"]: f for f in all_files}
 
@@ -382,6 +386,7 @@ def _poll_until_live(dxpy, all_files, waiting):
         while waiting_ids:
             now = datetime.now().strftime("%H:%M")
             still_waiting = set()
+            newly_live = []
             for fid in waiting_ids:
                 f = file_index[fid]
                 try:
@@ -391,6 +396,8 @@ def _poll_until_live(dxpy, all_files, waiting):
                     f["archival_state"] = state
                     if state != "live":
                         still_waiting.add(fid)
+                    else:
+                        newly_live.append(f)
                 except Exception as e:
                     print(f"  WARNING: Could not check state of {fid}: {e}", file=sys.stderr)
                     still_waiting.add(fid)
@@ -399,8 +406,10 @@ def _poll_until_live(dxpy, all_files, waiting):
             total = len(waiting_ids)
             print(f"[{now}] Waiting for unarchive: {ready}/{total} files ready...")
 
+            if newly_live and on_live:
+                on_live(newly_live)
+
             if not still_waiting:
-                print("All files are now live.")
                 break
 
             waiting_ids = still_waiting
@@ -520,8 +529,15 @@ def main():
                   f"(live files preferred).")
         files = files[:args.limit]
 
-    files = handle_archives(dxpy, files, auto_yes=args.yes, skip_archived=args.skip_archived)
-    download_files(dxpy, files, args.output, skip_existing=args.skip_existing, emit_json=args.json)
+    def _download(batch):
+        download_files(dxpy, batch, args.output, skip_existing=args.skip_existing, emit_json=args.json)
+
+    # Download already-live files immediately without waiting for unarchiving ones
+    live = [f for f in files if f["archival_state"] == "live"]
+    if live:
+        _download(live)
+
+    handle_archives(dxpy, files, auto_yes=args.yes, skip_archived=args.skip_archived, on_live=_download)
 
 
 if __name__ == "__main__":
