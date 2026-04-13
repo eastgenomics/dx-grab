@@ -337,13 +337,13 @@ def handle_archives(dxpy, files, auto_yes=False, skip_archived=False):
             unarchiving = unarchiving + archived
         else:
             answer = input("\nUnarchive them? Unarchiving typically takes several hours. [y/N] ").strip().lower()
-            if answer == "y":
+            if answer in ("y", "yes"):
                 _submit_unarchive(dxpy, archived)
                 for f in archived:
                     f["archival_state"] = "unarchiving"
                 unarchiving = unarchiving + archived
             else:
-                print("Skipping archived files.")
+                print(f"Skipping {len(archived)} archived file(s) (got: {answer!r}).")
                 files = [f for f in files if f["archival_state"] != "archived"]
 
     if unarchiving:
