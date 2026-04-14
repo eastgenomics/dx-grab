@@ -332,17 +332,19 @@ def handle_archives(dxpy, files, auto_yes=False, skip_archived=False, on_live=No
             files = [f for f in files if f["archival_state"] not in ("archived", "archival")]
         elif auto_yes:
             print("Unarchiving automatically (--yes).")
-            _submit_unarchive(dxpy, needs_unarchive)
+            submitted = _submit_unarchive(dxpy, needs_unarchive)
             for f in needs_unarchive:
-                f["archival_state"] = "unarchiving"
-            unarchiving = unarchiving + needs_unarchive
+                if f["file_id"] in submitted:
+                    f["archival_state"] = "unarchiving"
+            unarchiving.extend(f for f in needs_unarchive if f["file_id"] in submitted)
         else:
             answer = input("\nUnarchive them? Unarchiving typically takes several hours. [y/N] ").strip().lower()
             if answer in ("y", "yes"):
-                _submit_unarchive(dxpy, needs_unarchive)
+                submitted = _submit_unarchive(dxpy, needs_unarchive)
                 for f in needs_unarchive:
-                    f["archival_state"] = "unarchiving"
-                unarchiving = unarchiving + needs_unarchive
+                    if f["file_id"] in submitted:
+                        f["archival_state"] = "unarchiving"
+                unarchiving.extend(f for f in needs_unarchive if f["file_id"] in submitted)
             else:
                 print(f"Skipping {len(needs_unarchive)} file(s) (got: {answer!r}).")
                 files = [f for f in files if f["archival_state"] not in ("archived", "archival")]
@@ -354,20 +356,26 @@ def handle_archives(dxpy, files, auto_yes=False, skip_archived=False, on_live=No
 
 
 def _submit_unarchive(dxpy, files):
-    """Group files by project and submit unarchive requests (max 1000 per call)."""
+    """Group files by project and submit unarchive requests (max 1000 per call).
+
+    Returns the set of file IDs whose unarchive request was accepted.
+    """
     by_project = defaultdict(list)
     for f in files:
         by_project[f["project_id"]].append(f["file_id"])
 
+    submitted_ids = set()
     for proj_id, file_ids in by_project.items():
         for i in range(0, len(file_ids), 1000):
             batch = file_ids[i:i + 1000]
             try:
                 dxpy.api.project_unarchive(proj_id, {"files": batch})
+                submitted_ids.update(batch)
             except Exception as e:
                 print(f"  WARNING: Unarchive request failed for {proj_id}: {e}", file=sys.stderr)
 
-    print(f"Unarchive requested for {len(files)} file(s).")
+    print(f"Unarchive requested for {len(submitted_ids)} of {len(files)} file(s).")
+    return submitted_ids
 
 
 def _poll_until_live(dxpy, all_files, waiting, on_live=None):
