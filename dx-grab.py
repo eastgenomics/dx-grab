@@ -452,7 +452,8 @@ def resolve_local_path(output_dir, files):
 
 def download_files(dxpy, files, output_dir, skip_existing=False, emit_json=False):
     os.makedirs(output_dir, exist_ok=True)
-    files = resolve_local_path(output_dir, files)
+    if any("local_path" not in f for f in files):
+        files = resolve_local_path(output_dir, files)
 
     live = [f for f in files if f["archival_state"] == "live"]
     skipped = len(files) - len(live)
@@ -536,6 +537,10 @@ def main():
             print(f"\nLimit set: downloading {args.limit} of {len(files)} matched file(s) "
                   f"(live files preferred).")
         files = files[:args.limit]
+
+    # Resolve destination paths once across the full selection so collision
+    # detection is stable across incremental download batches.
+    files = resolve_local_path(args.output, files)
 
     def _download(batch):
         download_files(dxpy, batch, args.output, skip_existing=args.skip_existing, emit_json=args.json)
