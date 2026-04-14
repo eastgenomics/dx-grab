@@ -304,73 +304,86 @@ def print_table(files, emit_json=False):
     print(f"\nTotal: {len(files)} file(s), {fmt_size(total)}")
 
 
-def handle_archives(dxpy, files, auto_yes=False, skip_archived=False):
+def handle_archives(dxpy, files, auto_yes=False, skip_archived=False, on_live=None):
     """
     Prompt the user about archived files, submit unarchive requests if needed,
     and poll until all files that were archiving are live.
     Returns the (possibly updated) file list.
     """
-    archived = [f for f in files if f["archival_state"] == "archived"]
-    archival = [f for f in files if f["archival_state"] == "archival"]
+    # Both 'archived' and 'archival' (currently being archived) can be unarchived;
+    # for 'archival' files, unarchiving cancels the in-progress archive operation.
+    needs_unarchive = [f for f in files if f["archival_state"] in ("archived", "archival")]
     unarchiving = [f for f in files if f["archival_state"] == "unarchiving"]
 
-    if archival:
-        print(f"\nWARNING: {len(archival)} file(s) are currently being archived and cannot be "
-              f"retrieved right now. They will be skipped:")
-        for f in archival:
-            print(f"  {f['project_name']}/{f['folder']}/{f['name']}")
-        files = [f for f in files if f["archival_state"] != "archival"]
-
-    if archived:
-        print(f"\n{len(archived)} file(s) are archived:")
-        for f in archived:
-            print(f"  {f['project_name']}{f['folder']}/{f['name']}  ({fmt_size(f['size'])})")
+    if needs_unarchive:
+        archival_count = sum(1 for f in needs_unarchive if f["archival_state"] == "archival")
+        archived_count = sum(1 for f in needs_unarchive if f["archival_state"] == "archived")
+        parts = []
+        if archived_count:
+            parts.append(f"{archived_count} archived")
+        if archival_count:
+            parts.append(f"{archival_count} currently being archived (unarchiving will cancel this)")
+        print(f"\n{len(needs_unarchive)} file(s) need unarchiving ({', '.join(parts)}):")
+        for f in needs_unarchive:
+            print(f"  [{f['archival_state']}] {f['project_name']}{f['folder']}/{f['name']}  ({fmt_size(f['size'])})")
 
         if skip_archived:
             print("Skipping archived files (--skip-archived).")
-            files = [f for f in files if f["archival_state"] != "archived"]
+            files = [f for f in files if f["archival_state"] not in ("archived", "archival")]
         elif auto_yes:
             print("Unarchiving automatically (--yes).")
-            _submit_unarchive(dxpy, archived)
-            for f in archived:
-                f["archival_state"] = "unarchiving"
-            unarchiving = unarchiving + archived
+            submitted = _submit_unarchive(dxpy, needs_unarchive)
+            for f in needs_unarchive:
+                if f["file_id"] in submitted:
+                    f["archival_state"] = "unarchiving"
+            unarchiving.extend(f for f in needs_unarchive if f["file_id"] in submitted)
         else:
             answer = input("\nUnarchive them? Unarchiving typically takes several hours. [y/N] ").strip().lower()
             if answer in ("y", "yes"):
-                _submit_unarchive(dxpy, archived)
-                for f in archived:
-                    f["archival_state"] = "unarchiving"
-                unarchiving = unarchiving + archived
+                submitted = _submit_unarchive(dxpy, needs_unarchive)
+                for f in needs_unarchive:
+                    if f["file_id"] in submitted:
+                        f["archival_state"] = "unarchiving"
+                unarchiving.extend(f for f in needs_unarchive if f["file_id"] in submitted)
             else:
-                print(f"Skipping {len(archived)} archived file(s) (got: {answer!r}).")
-                files = [f for f in files if f["archival_state"] != "archived"]
+                print(f"Skipping {len(needs_unarchive)} file(s) (got: {answer!r}).")
+                files = [f for f in files if f["archival_state"] not in ("archived", "archival")]
 
     if unarchiving:
-        files = _poll_until_live(dxpy, files, unarchiving)
+        files = _poll_until_live(dxpy, files, unarchiving, on_live=on_live)
 
     return files
 
 
 def _submit_unarchive(dxpy, files):
-    """Group files by project and submit unarchive requests (max 1000 per call)."""
+    """Group files by project and submit unarchive requests (max 1000 per call).
+
+    Returns the set of file IDs whose unarchive request was accepted.
+    """
     by_project = defaultdict(list)
     for f in files:
         by_project[f["project_id"]].append(f["file_id"])
 
+    submitted_ids = set()
     for proj_id, file_ids in by_project.items():
         for i in range(0, len(file_ids), 1000):
             batch = file_ids[i:i + 1000]
             try:
                 dxpy.api.project_unarchive(proj_id, {"files": batch})
+                submitted_ids.update(batch)
             except Exception as e:
                 print(f"  WARNING: Unarchive request failed for {proj_id}: {e}", file=sys.stderr)
 
-    print(f"Unarchive requested for {len(files)} file(s).")
+    print(f"Unarchive requested for {len(submitted_ids)} of {len(files)} file(s).")
+    return submitted_ids
 
 
-def _poll_until_live(dxpy, all_files, waiting):
-    """Poll every 10 minutes until all waiting files are live."""
+def _poll_until_live(dxpy, all_files, waiting, on_live=None):
+    """Poll every 10 minutes until all waiting files are live.
+
+    Calls on_live(batch) with each batch of newly-live files as they appear,
+    so downloads can start immediately rather than waiting for all files.
+    """
     waiting_ids = {f["file_id"] for f in waiting}
     file_index = {f["file_id"]: f for f in all_files}
 
@@ -381,6 +394,7 @@ def _poll_until_live(dxpy, all_files, waiting):
         while waiting_ids:
             now = datetime.now().strftime("%H:%M")
             still_waiting = set()
+            newly_live = []
             for fid in waiting_ids:
                 f = file_index[fid]
                 try:
@@ -390,6 +404,8 @@ def _poll_until_live(dxpy, all_files, waiting):
                     f["archival_state"] = state
                     if state != "live":
                         still_waiting.add(fid)
+                    else:
+                        newly_live.append(f)
                 except Exception as e:
                     print(f"  WARNING: Could not check state of {fid}: {e}", file=sys.stderr)
                     still_waiting.add(fid)
@@ -398,8 +414,10 @@ def _poll_until_live(dxpy, all_files, waiting):
             total = len(waiting_ids)
             print(f"[{now}] Waiting for unarchive: {ready}/{total} files ready...")
 
+            if newly_live and on_live:
+                on_live(newly_live)
+
             if not still_waiting:
-                print("All files are now live.")
                 break
 
             waiting_ids = still_waiting
@@ -434,7 +452,8 @@ def resolve_local_path(output_dir, files):
 
 def download_files(dxpy, files, output_dir, skip_existing=False, emit_json=False):
     os.makedirs(output_dir, exist_ok=True)
-    files = resolve_local_path(output_dir, files)
+    if any("local_path" not in f for f in files):
+        files = resolve_local_path(output_dir, files)
 
     live = [f for f in files if f["archival_state"] == "live"]
     skipped = len(files) - len(live)
@@ -519,8 +538,19 @@ def main():
                   f"(live files preferred).")
         files = files[:args.limit]
 
-    files = handle_archives(dxpy, files, auto_yes=args.yes, skip_archived=args.skip_archived)
-    download_files(dxpy, files, args.output, skip_existing=args.skip_existing, emit_json=args.json)
+    # Resolve destination paths once across the full selection so collision
+    # detection is stable across incremental download batches.
+    files = resolve_local_path(args.output, files)
+
+    def _download(batch):
+        download_files(dxpy, batch, args.output, skip_existing=args.skip_existing, emit_json=args.json)
+
+    # Download already-live files immediately without waiting for unarchiving ones
+    live = [f for f in files if f["archival_state"] == "live"]
+    if live:
+        _download(live)
+
+    handle_archives(dxpy, files, auto_yes=args.yes, skip_archived=args.skip_archived, on_live=_download)
 
 
 if __name__ == "__main__":
