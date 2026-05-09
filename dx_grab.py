@@ -473,9 +473,10 @@ def _poll_until_live(dxpy, all_files, waiting, on_live=None):
 
 
 def resolve_local_path(output_dir, files):
-    """
-    Assign a local path to each file. Prefix with project name when two
-    files from different projects share the same filename.
+    """Assign a local path to each file dict in-place and return the list.
+
+    When two files from different projects share the same filename, prefix
+    each local name with the sanitised project name to avoid collisions.
     """
     name_to_projects = defaultdict(set)
     for f in files:
