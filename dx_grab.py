@@ -23,10 +23,11 @@ This module is also importable as dx_grab. Public API:
 """
 
 import argparse
+import argparse
 import fnmatch
 import json
-import re
 import os
+import re
 import sys
 import time
 from collections import defaultdict
@@ -93,7 +94,7 @@ Examples:
         "--project",
         default=None,
         metavar="PATTERN",
-        help="Project name glob pattern (e.g. '*230601*', 'run_*'). Default: all projects.",
+        help="Project name glob pattern (e.g. '*230601*', 'run_*') or bare project ID (project-xxxx). Default: all projects.",
     )
     parser.add_argument(
         "--folder",
@@ -172,20 +173,17 @@ Examples:
 def check_auth():
     """Authenticate with DNAnexus and return the dxpy module.
 
-    Exit with code 1 if not logged in or if the API call fails.
+    Raises RuntimeError if not logged in or if the API call fails.
     """
     import dxpy
     try:
         dxpy.whoami()
     except dxpy.exceptions.DXAPIError as e:
         if e.code == 401:
-            print("ERROR: Not logged in to DNAnexus. Run `dx login` first.", file=sys.stderr)
-        else:
-            print(f"ERROR: DNAnexus API error: {e}", file=sys.stderr)
-        sys.exit(1)
+            raise RuntimeError("Not logged in to DNAnexus. Run `dx login` first.") from e
+        raise RuntimeError(f"DNAnexus API error: {e}") from e
     except Exception as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        sys.exit(1)
+        raise RuntimeError(str(e)) from e
     return dxpy
 
 
@@ -225,7 +223,7 @@ def _glob_to_iregex(pattern):
 def find_projects(dxpy, pattern):
     """Return DNAnexus projects whose name matches pattern.
 
-    Print matching projects to stdout. Exit with code 1 if none are found.
+    Print matching projects to stdout. Raises ValueError if none are found.
     When pattern is None, return all accessible projects.
     """
     if pattern:
@@ -235,8 +233,8 @@ def find_projects(dxpy, pattern):
         print("\nSearching all accessible projects...")
         projects = list(dxpy.find_projects(describe=True))
     if not projects:
-        print("No projects found.", file=sys.stderr)
-        sys.exit(1)
+        msg = f"No projects found matching {pattern!r}." if pattern else "No accessible projects found."
+        raise ValueError(msg)
     print(f"Found {len(projects)} project(s):")
     for p in projects:
         print(f"  {p['describe']['name']}  ({p['id']})")
@@ -377,7 +375,7 @@ def handle_archives(dxpy, files, auto_yes=False, skip_archived=False, on_live=No
             for f in needs_unarchive:
                 if f["file_id"] in submitted:
                     f["archival_state"] = "unarchiving"
-            unarchiving.extend(f for f in needs_unarchive if f["file_id"] in submitted)
+                    unarchiving.append(f)
         else:
             answer = input("\nUnarchive them? Unarchiving typically takes several hours. [y/N] ").strip().lower()
             if answer in ("y", "yes"):
@@ -385,7 +383,7 @@ def handle_archives(dxpy, files, auto_yes=False, skip_archived=False, on_live=No
                 for f in needs_unarchive:
                     if f["file_id"] in submitted:
                         f["archival_state"] = "unarchiving"
-                unarchiving.extend(f for f in needs_unarchive if f["file_id"] in submitted)
+                        unarchiving.append(f)
             else:
                 print(f"Skipping {len(needs_unarchive)} file(s) (got: {answer!r}).")
                 files = [f for f in files if f["archival_state"] not in ("archived", "archival")]
@@ -561,26 +559,21 @@ def resolve_project(dxpy, project_arg):
       - A project ID directly (project-xxx...)
       - A name glob pattern — must match exactly one project.
 
-    Exits with code 1 if the project cannot be resolved unambiguously.
+    Raises ValueError if the project cannot be resolved unambiguously.
     """
     if project_arg.startswith("project-"):
         try:
             desc = dxpy.DXProject(project_arg).describe()
             return project_arg, desc["name"]
         except Exception as e:
-            print(f"ERROR: Could not describe project '{project_arg}': {e}",
-                  file=sys.stderr)
-            sys.exit(1)
+            raise ValueError(f"Could not describe project '{project_arg}': {e}") from e
 
-    projects = find_projects(dxpy, project_arg)  # prints matches, exits with code 1 if none found
+    projects = find_projects(dxpy, project_arg)  # prints matches, raises ValueError if none found
 
     if len(projects) > 1:
-        print(
-            f"ERROR: Pattern '{project_arg}' matches {len(projects)} projects "
-            "— be more specific.",
-            file=sys.stderr,
+        raise ValueError(
+            f"Pattern '{project_arg}' matches {len(projects)} projects — be more specific."
         )
-        sys.exit(1)
 
     p = projects[0]
     return p["id"], p["describe"]["name"]
@@ -589,51 +582,60 @@ def resolve_project(dxpy, project_arg):
 def main():
     """Entry point: find and download files, handling archives interactively."""
     args = parse_args()
-    dxpy = check_auth()
+    try:
+        dxpy = check_auth()
 
-    projects = find_projects(dxpy, args.project)
-    files = find_files(dxpy, projects, args.name, args.folder)
+        if args.project and args.project.startswith("project-"):
+            proj_id, proj_name = resolve_project(dxpy, args.project)
+            projects = [{"id": proj_id, "describe": {"name": proj_name}}]
+        else:
+            projects = find_projects(dxpy, args.project)
+        files = find_files(dxpy, projects, args.name, args.folder)
 
-    if args.exclude:
-        before = len(files)
-        files = [
-            f for f in files
-            if not any(fnmatch.fnmatch(f["name"].lower(), pat.lower()) for pat in args.exclude)
-        ]
-        excluded = before - len(files)
-        if excluded:
-            print(f"Excluded {excluded} file(s) matching: {', '.join(args.exclude)}")
+        if args.exclude:
+            before = len(files)
+            files = [
+                f for f in files
+                if not any(fnmatch.fnmatch(f["name"].lower(), pat.lower()) for pat in args.exclude)
+            ]
+            excluded = before - len(files)
+            if excluded:
+                print(f"Excluded {excluded} file(s) matching: {', '.join(args.exclude)}")
 
-    if not files:
-        print("\nNo matching files found.")
-        sys.exit(2)
+        if not files:
+            print("\nNo matching files found.")
+            sys.exit(2)
 
-    print_table(files, emit_json=args.json)
+        print_table(files, emit_json=args.json)
 
-    if args.dry_run:
-        sys.exit(0)
+        if args.dry_run:
+            sys.exit(0)
 
-    if args.limit is not None:
-        if args.limit < len(files):
-            # Sort live files first so the limit is filled without touching archived files
-            files = sorted(files, key=lambda f: 0 if f["archival_state"] == "live" else 1)
-            print(f"\nLimit set: downloading {args.limit} of {len(files)} matched file(s) "
-                  f"(live files preferred).")
-        files = files[:args.limit]
+        if args.limit is not None:
+            if args.limit < len(files):
+                # Sort live files first so the limit is filled without touching archived files
+                files = sorted(files, key=lambda f: 0 if f["archival_state"] == "live" else 1)
+                print(f"\nLimit set: downloading {args.limit} of {len(files)} matched file(s) "
+                      f"(live files preferred).")
+            files = files[:args.limit]
 
-    # Resolve destination paths once across the full selection so collision
-    # detection is stable across incremental download batches.
-    files = resolve_local_path(args.output, files)
+        # Resolve destination paths once across the full selection so collision
+        # detection is stable across incremental download batches.
+        files = resolve_local_path(args.output, files)
 
-    def _download(batch):
-        download_files(dxpy, batch, args.output, skip_existing=args.skip_existing, emit_json=args.json)
+        def _download(batch):
+            download_files(dxpy, batch, args.output, skip_existing=args.skip_existing, emit_json=args.json)
 
-    # Download already-live files immediately without waiting for unarchiving ones
-    live = [f for f in files if f["archival_state"] == "live"]
-    if live:
-        _download(live)
+        # Download already-live files immediately without waiting for unarchiving ones
+        live = [f for f in files if f["archival_state"] == "live"]
+        if live:
+            _download(live)
 
-    handle_archives(dxpy, files, auto_yes=args.yes, skip_archived=args.skip_archived, on_live=_download)
+        handle_archives(dxpy, files, auto_yes=args.yes, skip_archived=args.skip_archived, on_live=_download)
+
+    except (ValueError, RuntimeError) as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
