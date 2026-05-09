@@ -1,4 +1,4 @@
-# dx-grab
+# dx_grab
 
 A command-line tool to find and download files across DNAnexus projects.
 
@@ -10,8 +10,8 @@ A command-line tool to find and download files across DNAnexus projects.
 ## Installation
 
 ```bash
-git clone https://github.com/eastgenomics/dx-grab.git
-cd dx-grab
+git clone https://github.com/eastgenomics/dx_grab.git
+cd dx_grab
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 source .venv/bin/activate
@@ -28,9 +28,9 @@ dx login
 ## Usage
 
 ```
-python3 dx-grab.py --name PATTERN [--project PATTERN] [--folder PATTERN]
+python3 dx_grab.py --name PATTERN [--project PATTERN] [--folder PATTERN]
                    [--exclude PATTERN] [--output DIR] [--limit N] [--dry-run]
-python3 dx-grab.py --preset NAME [--output DIR] [--limit N] [--dry-run]
+python3 dx_grab.py --preset NAME [--output DIR] [--limit N] [--dry-run]
 ```
 
 | Argument | Required | Description |
@@ -74,73 +74,73 @@ Presets are named shortcuts that bundle `--project`, `--name`, and `--folder` va
 Use the `haem-vcf` preset to list HaemOnc pre-workbook mutect2 VCFs without downloading:
 
 ```bash
-python3 dx-grab.py --preset haem-vcf --dry-run
+python3 dx_grab.py --preset haem-vcf --dry-run
 ```
 
 List all VCFs across every accessible project without downloading:
 
 ```bash
-python3 dx-grab.py --name "*.vcf.gz" --dry-run
+python3 dx_grab.py --name "*.vcf.gz" --dry-run
 ```
 
 List all VCFs across projects matching `*230601*` without downloading:
 
 ```bash
-python3 dx-grab.py --project "*230601*" --name "*.vcf.gz" --dry-run
+python3 dx_grab.py --project "*230601*" --name "*.vcf.gz" --dry-run
 ```
 
 Download FASTQs from all matching run projects into a local directory:
 
 ```bash
-python3 dx-grab.py --project "run_*" --folder "*/fastq*" --name "*.fastq.gz" --output ./fastqs
+python3 dx_grab.py --project "run_*" --folder "*/fastq*" --name "*.fastq.gz" --output ./fastqs
 ```
 
 Download all BAMs from a specific project by ID:
 
 ```bash
-python3 dx-grab.py --project "project-xxxx" --name "*.bam" --output ./downloads
+python3 dx_grab.py --project "project-xxxx" --name "*.bam" --output ./downloads
 ```
 
 Find `*.filter.vcf.gz` but exclude any filenames containing `Q`:
 
 ```bash
-python3 dx-grab.py --project "*230601*" --name "*.filter.vcf.gz" --exclude "*Q*" --dry-run
+python3 dx_grab.py --project "*230601*" --name "*.filter.vcf.gz" --exclude "*Q*" --dry-run
 ```
 
 Exclude multiple patterns:
 
 ```bash
-python3 dx-grab.py --name "*.vcf.gz" --exclude "*Q*" --exclude "*fail*"
+python3 dx_grab.py --name "*.vcf.gz" --exclude "*Q*" --exclude "*fail*"
 ```
 
 Download up to 5 files, preferring live files over archived ones:
 
 ```bash
-python3 dx-grab.py --project "*230601*" --name "*.vcf.gz" --limit 5
+python3 dx_grab.py --project "*230601*" --name "*.vcf.gz" --limit 5
 ```
 
 Download non-interactively, skipping any archived files without prompting:
 
 ```bash
-python3 dx-grab.py --preset haem-vcf --limit 20 --skip-archived --output ./vcfs
+python3 dx_grab.py --preset haem-vcf --limit 20 --skip-archived --output ./vcfs
 ```
 
 Download non-interactively, automatically submitting unarchive requests for archived files:
 
 ```bash
-python3 dx-grab.py --preset haem-vcf --yes --output ./vcfs
+python3 dx_grab.py --preset haem-vcf --yes --output ./vcfs
 ```
 
 Resume a partial download without re-downloading files already on disk:
 
 ```bash
-python3 dx-grab.py --preset haem-vcf --limit 20 --skip-existing --output ./vcfs
+python3 dx_grab.py --preset haem-vcf --limit 20 --skip-existing --output ./vcfs
 ```
 
 List matched files as JSON (e.g. for scripting):
 
 ```bash
-python3 dx-grab.py --preset haem-vcf --dry-run --json
+python3 dx_grab.py --preset haem-vcf --dry-run --json
 ```
 
 ## Archived files
