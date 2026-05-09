@@ -3,13 +3,23 @@
 dx-grab — Find and download files from DNAnexus projects.
 
 Usage:
-    python dx-grab.py --name PATTERN [--project PATTERN] [--folder PATTERN]
+    python dx_grab.py --name PATTERN [--project PATTERN] [--folder PATTERN]
                       [--output DIR] [--dry-run]
 
 Exit codes:
     0  Success (files downloaded, or --dry-run completed)
     1  Error (bad arguments, auth failure, etc.)
     2  No matching files found
+
+This module is also importable as dx_grab. Public API:
+    check_auth()       -- authenticate and return dxpy
+    resolve_project()  -- resolve a project ID or name glob to (id, name)
+    find_projects()    -- search projects by name pattern
+    find_files()       -- search files across projects
+    handle_archives()  -- prompt/unarchive/poll archived files
+    download_files()   -- download a list of files
+    resolve_local_path() -- assign local output paths
+    fmt_size()         -- human-readable file size
 """
 
 import argparse
@@ -48,6 +58,7 @@ PRESETS = {
 
 
 def parse_args():
+    """Parse and return command-line arguments."""
     preset_names = ", ".join(PRESETS)
     parser = argparse.ArgumentParser(
         description="Find and download files across DNAnexus projects.",
@@ -64,11 +75,11 @@ Presets ({preset_names}):
             --project "002_26*CEN" --name "*.optimised_filtered.vcf.gz" --folder "*eggd_optimised_filtering*"
 
 Examples:
-  python dx-grab.py --preset haem-vcf --dry-run
-  python dx-grab.py --name "*.vcf.gz" --dry-run
-  python dx-grab.py --project "*230601*" --name "*.vcf.gz" --dry-run
-  python dx-grab.py --project "run_*" --folder "*/fastq*" --name "*.fastq.gz" --output ./fastqs
-  python dx-grab.py --project "project-xxxx" --name "*.bam"
+  python dx_grab.py --preset haem-vcf --dry-run
+  python dx_grab.py --name "*.vcf.gz" --dry-run
+  python dx_grab.py --project "*230601*" --name "*.vcf.gz" --dry-run
+  python dx_grab.py --project "run_*" --folder "*/fastq*" --name "*.fastq.gz" --output ./fastqs
+  python dx_grab.py --project "project-xxxx" --name "*.bam"
         """,
     )
     parser.add_argument(
@@ -159,6 +170,10 @@ Examples:
 
 
 def check_auth():
+    """Authenticate with DNAnexus and return the dxpy module.
+
+    Exit with code 1 if not logged in or if the API call fails.
+    """
     import dxpy
     try:
         dxpy.whoami()
@@ -175,6 +190,7 @@ def check_auth():
 
 
 def fmt_size(n_bytes):
+    """Return n_bytes as a human-readable string (e.g. '1.5 MB')."""
     for unit in ("B", "KB", "MB", "GB", "TB"):
         if n_bytes < 1024:
             return f"{n_bytes:.1f} {unit}"
@@ -207,6 +223,11 @@ def _glob_to_iregex(pattern):
 
 
 def find_projects(dxpy, pattern):
+    """Return DNAnexus projects whose name matches pattern.
+
+    Print matching projects to stdout. Exit with code 1 if none are found.
+    When pattern is None, return all accessible projects.
+    """
     if pattern:
         print(f"\nSearching for projects matching: {pattern!r}")
         projects = list(dxpy.find_projects(describe=True, name=_glob_to_iregex(pattern), name_mode="regexp"))
@@ -223,6 +244,12 @@ def find_projects(dxpy, pattern):
 
 
 def find_files(dxpy, projects, name_pattern, folder_pattern):
+    """Return files matching name_pattern across the given projects.
+
+    name_pattern is a glob converted to a case-insensitive regex.
+    folder_pattern is an optional glob; only files in matching folders
+    are returned. Skips projects the caller lacks permission to access.
+    """
     print(f"\nSearching for files matching name={name_pattern!r}"
           + (f", folder={folder_pattern!r}" if folder_pattern else "") + " ...")
 
@@ -268,6 +295,11 @@ def find_files(dxpy, projects, name_pattern, folder_pattern):
 
 
 def print_table(files, emit_json=False):
+    """Print a formatted table of files, or a JSON array when emit_json is True.
+
+    When emit_json is True, progress messages go to stderr and the JSON
+    array goes to stdout so it can be piped to other tools.
+    """
     if not files:
         print("No files found.")
         return
@@ -305,10 +337,19 @@ def print_table(files, emit_json=False):
 
 
 def handle_archives(dxpy, files, auto_yes=False, skip_archived=False, on_live=None):
-    """
-    Prompt the user about archived files, submit unarchive requests if needed,
-    and poll until all files that were archiving are live.
+    """Prompt about archived files, unarchive if needed, and poll until live.
+
+    Both 'archived' and 'archival' (archiving in progress) files require
+    unarchiving; for 'archival' files, unarchiving cancels the operation.
     Returns the (possibly updated) file list.
+
+    Args:
+        auto_yes:     submit unarchive requests without prompting.
+        skip_archived: remove archived files from the list without prompting.
+        on_live:      optional callback called with each batch of newly-live
+                      files as they become available during polling, so
+                      downloads can start immediately rather than waiting
+                      for all files.
     """
     # Both 'archived' and 'archival' (currently being archived) can be unarchived;
     # for 'archival' files, unarchiving cancels the in-progress archive operation.
@@ -386,8 +427,10 @@ def _poll_until_live(dxpy, all_files, waiting, on_live=None):
     """
     waiting_ids = {f["file_id"] for f in waiting}
     file_index = {f["file_id"]: f for f in all_files}
+    total = len(waiting_ids)   # original batch size — denominator stays fixed
+    done  = 0                  # cumulative count of files that have gone live
 
-    print(f"\nWaiting for {len(waiting_ids)} file(s) to unarchive (polling every 10 minutes).")
+    print(f"\nWaiting for {total} file(s) to unarchive (polling every 10 minutes).")
     print("Press Ctrl+C to abort — re-run the same command to resume.\n")
 
     try:
@@ -410,9 +453,8 @@ def _poll_until_live(dxpy, all_files, waiting, on_live=None):
                     print(f"  WARNING: Could not check state of {fid}: {e}", file=sys.stderr)
                     still_waiting.add(fid)
 
-            ready = len(waiting_ids) - len(still_waiting)
-            total = len(waiting_ids)
-            print(f"[{now}] Waiting for unarchive: {ready}/{total} files ready...")
+            done += len(newly_live)
+            print(f"[{now}] Waiting for unarchive: {done}/{total} file(s) live ...")
 
             if newly_live and on_live:
                 on_live(newly_live)
@@ -451,6 +493,13 @@ def resolve_local_path(output_dir, files):
 
 
 def download_files(dxpy, files, output_dir, skip_existing=False, emit_json=False):
+    """Download live files to output_dir.
+
+    Non-live files are skipped with a warning. When skip_existing is True,
+    files already present at their local destination are also skipped.
+    When emit_json is True, progress goes to stderr and a JSON summary of
+    downloaded files goes to stdout.
+    """
     os.makedirs(output_dir, exist_ok=True)
     if any("local_path" not in f for f in files):
         files = resolve_local_path(output_dir, files)
@@ -522,7 +571,7 @@ def resolve_project(dxpy, project_arg):
                   file=sys.stderr)
             sys.exit(1)
 
-    projects = find_projects(dxpy, project_arg)  # prints matches, exits on 0
+    projects = find_projects(dxpy, project_arg)  # prints matches, exits with code 1 if none found
 
     if len(projects) > 1:
         print(
@@ -537,6 +586,7 @@ def resolve_project(dxpy, project_arg):
 
 
 def main():
+    """Entry point: find and download files, handling archives interactively."""
     args = parse_args()
     dxpy = check_auth()
 
